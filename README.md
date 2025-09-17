@@ -1,5 +1,5 @@
 
-\# POS-Nelly-Buffet
+# POS-Nelly-Buffet
 
 A simple POS project for a restaurant.
 
