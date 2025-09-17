@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema POS para Restaurante</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="data:application/manifest+json,{
+        &quot;name&quot;: &quot;Nelly Buffet POS&quot;,
+        &quot;short_name&quot;: &quot;Nelly POS&quot;,
+        &quot;start_url&quot;: &quot;.&quot;,
+        &quot;display&quot;: &quot;standalone&quot;,
+        &quot;background_color&quot;: &quot;#ffffff&quot;,
+        &quot;theme_color&quot;: &quot;#e56c30&quot;,
+        &quot;icons&quot;: [
+            { &quot;src&quot;: &quot;https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png&quot;, &quot;type&quot;: &quot;image/png&quot;, &quot;sizes&quot;: &quot;192x192&quot; },
+            { &quot;src&quot;: &quot;https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png&quot;, &quot;type&quot;: &quot;image/png&quot;, &quot;sizes&quot;: &quot;512x512&quot; }
+        ]
+    }">
+    <style>
+        :root {
+            --primary-color: #e56c30;
+            --primary-hover-color: #d45f29;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            /* Evita el efecto de "resaltado" azul en taps en moviles */
+            -webkit-tap-highlight-color: transparent;
+        }
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            height: calc(100vh - 145px); /* Full height minus header and banner */
+        }
+        @media (min-width: 1024px) {
+            .main-container {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 1rem;
+        }
+        .nav-link {
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .modal {
+            display: none; /* Hidden by default */
+        }
+        .modal.flex {
+            display: flex;
+        }
+        .product-card.selected {
+            border: 3px solid var(--primary-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .product-card-img {
+            height: 80px;
+            width: 100%;
+            object-fit: cover;
+            border-radius: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Anti-selección de Texto para mejorar scroll táctil */
+        .touch-scroll-area {
+            -webkit-user-select: none; /* Safari */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE 10+ */
+            user-select: none; /* Estándar */
+            -webkit-touch-callout: none; /* Previene el menú contextual en iOS */
+        }
+        
+        /* Print-specific styles */
+        #print-area { display: none; }
+
+        @media print {
+            body > *:not(#print-area) {
+                display: none !important;
+            }
+            #print-area, #print-area * {
+                display: block !important;
+                visibility: visible !important;
+            }
+            #print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            /* Styles for receipt printing */
+            body.printing-receipt #print-area {
+                font-family: monospace;
+            }
+            @page {
+                margin: 2mm;
+                /* Default size for receipts */
+                size: 80mm auto;
+            }
+             /* Styles for summary report printing */
+            body.printing-summary @page {
+                size: letter;
+                margin: 20mm;
+            }
+        }
+        .payment-methods { display: flex; gap: 1rem; margin-bottom: 1rem; }
+        .payment-radio-btn {
+            position: relative;
+            flex: 1 1 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f3f4f6;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.75rem;
+            padding: 0.75rem 0.25rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            user-select: none;
+        }
+        .payment-radio-btn.selected {
+            border-color: var(--primary-color, #e56c30);
+            background: #ffe5d1;
+            color: #e56c30;
+        }
+        .payment-radio-btn input[type="radio"] {
+            display: none;
+        }
+        @media (max-width: 640px) {
+            .payment-methods {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Overlays -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+        <div class="text-center"><i class="fas fa-spinner fa-spin text-4xl text-[var(--primary-color)]"></i><p class="mt-4 text-lg font-semibold">Inicializando aplicación...</p></div>
+    </div>
+    <div id="pin-modal" class="modal fixed inset-0 bg-black bg-opacity-60 items-center justify-center z-[60]">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-sm m-4 text-center">
+            <h2 class="text-2xl font-bold mb-4">Acción Restringida</h2>
+            <p class="text-gray-600 mb-6">Por favor, ingrese el PIN de administrador para continuar.</p>
+            <form id="pin-form">
+                <input type="password" id="pin-input" inputmode="numeric" class="w-full text-center text-2xl tracking-[.5em] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]" maxlength="4" required>
+                <p id="pin-error" class="text-red-500 h-5 mt-2"></p>
+                <div class="grid grid-cols-2 gap-4 mt-6">
+                    <button type="button" id="pin-cancel-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-colors">Cancelar</button>
+                    <button type="submit" class="bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors">Confirmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Header -->
+    <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+        <div class="flex items-center gap-3">
+            <img src="https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png" alt="Nelly Buffet Logo" class="h-12">
+        </div>
+        <nav class="flex gap-2 bg-gray-200 p-1 rounded-lg">
+            <button id="nav-pos" class="nav-link active px-4 py-2 rounded-md font-semibold text-gray-700 hover:bg-[var(--primary-hover-color)] hover:text-white"><i class="fas fa-cash-register mr-2"></i>POS</button>
+            <button id="nav-products" class="nav-link px-4 py-2 rounded-md font-semibold text-gray-700 hover:bg-[var(--primary-hover-color)] hover:text-white"><i class="fas fa-box-open mr-2"></i>Productos</button>
+            <button id="nav-reports" class="nav-link px-4 py-2 rounded-md font-semibold text-gray-700 hover:bg-[var(--primary-hover-color)] hover:text-white"><i class="fas fa-chart-line mr-2"></i>Reportes</button>
+            <button id="nav-settings" class="nav-link px-4 py-2 rounded-md font-semibold text-gray-700 hover:bg-[var(--primary-hover-color)] hover:text-white"><i class="fas fa-cog mr-2"></i>Ajustes</button>
+        </nav>
+        <div id="user-info" class="text-right">
+             <p class="font-semibold">Usuario: <span id="current-user-name"></span></p>
+             <p class="text-sm text-gray-500">Rol: <span id="current-user-role"></span></p>
+        </div>
+    </header>
+
+    <!-- Info Banner -->
+    <div class="bg-gray-700 text-white p-3 flex justify-between items-center shadow-lg">
+        <div class="flex items-center gap-4">
+            <div class="text-center"><div class="font-bold text-2xl" id="daily-sales-counter">0</div><div class="text-sm">Ventas de Hoy</div></div>
+            <div><div class="font-semibold text-lg" id="current-date">--/--/----</div></div>
+        </div>
+        <button id="daily-resume-btn" class="bg-[var(--primary-color)] hover:bg-[var(--primary-hover-color)] text-white font-bold py-2 px-4 rounded-lg transition-colors">Cuadre de Caja</button>
+    </div>
+
+    <main class="p-4">
+        <!-- POS View -->
+        <div id="pos-view">
+            <div class="main-container">
+                <div class="bg-white p-4 rounded-lg shadow-sm overflow-y-auto touch-scroll-area">
+                    <h2 class="text-xl font-semibold mb-4">Productos</h2>
+                    <div id="product-grid-container" class="product-grid"></div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow-sm flex flex-col h-[calc(100vh-250px)]">
+                    <h2 class="text-xl font-semibold mb-4">Orden Actual</h2>
+                    <button id="add-custom-product-btn" class="mb-4 bg-gray-200 p-3 rounded-lg hover:bg-gray-300 transition-all text-left flex items-center gap-2">
+                        <i class="fas fa-plus-circle text-gray-600"></i>
+                        <span class="font-bold text-gray-700">Agregar Producto Personalizado</span>
+                    </button>
+                    <div id="order-items-container" class="flex-grow overflow-y-auto touch-scroll-area">
+                        <p id="empty-order-message" class="text-gray-500 text-center mt-8">Su orden está vacía.</p>
+                    </div>
+                    <div class="border-t pt-4 mt-4">
+                        <div class="flex justify-between font-bold text-2xl mt-2 text-[var(--primary-color)]">
+                            <span>Total</span>
+                            <span id="order-total">DOP 0.00</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <button id="clear-order-btn" class="w-full bg-red-500 text-white font-bold py-3 rounded-lg hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                                <i class="fas fa-trash-alt mr-2"></i>Limpiar
+                            </button>
+                            <button id="pay-btn" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                                <i class="fas fa-dollar-sign mr-2"></i>Pagar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Management View -->
+        <div id="products-view" class="hidden">
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow-sm">
+                    <h2 id="product-form-title" class="text-2xl font-bold mb-4">Agregar Nuevo Producto</h2>
+                    <form id="product-form"><input type="hidden" id="product-id"><div class="mb-4"><label for="product-name" class="block text-gray-700 font-medium mb-2">Nombre del Producto</label><input type="text" id="product-name" inputmode="text" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]" required></div><div class="mb-4"><label for="product-price" class="block text-gray-700 font-medium mb-2">Precio (DOP)</label><input type="number" id="product-price" inputmode="decimal" min="0" step="0.01" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]" required></div><div class="mb-4"><label for="product-category" class="block text-gray-700 font-medium mb-2">Categoría</label><input type="text" id="product-category" inputmode="text" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]" required placeholder="Ej: Bebidas, Carnes"></div><div class="mb-4"><label for="product-image" class="block text-gray-700 font-medium mb-2">Imagen del Producto</label><input type="file" id="product-image" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-[var(--primary-color)] hover:file:bg-orange-100" accept="image/*"></div><div id="image-preview-container" class="hidden mb-4"><label class="block text-gray-700 font-medium mb-2">Imagen Actual</label><div class="flex items-center gap-4"><img id="product-image-preview" src="" class="w-20 h-20 object-cover rounded-lg border"><button type="button" id="remove-image-btn" class="bg-red-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-red-600"><i class="fas fa-trash-alt"></i> Eliminar</button></div><input type="hidden" id="remove-image-flag" value="false"></div><div class="flex gap-4"><button type="submit" class="flex-1 bg-[var(--primary-color)] text-white font-bold py-3 rounded-lg hover:bg-[var(--primary-hover-color)]"><i class="fas fa-save mr-2"></i><span id="product-form-submit-btn-text">Guardar Producto</span></button><button type="button" id="cancel-edit-btn" class="flex-1 bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600 hidden"><i class="fas fa-times mr-2"></i>Cancelar Edición</button></div></form>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-sm"><h2 class="text-2xl font-bold mb-4">Productos Existentes</h2><div id="product-list-container" class="space-y-3 max-h-[65vh] overflow-y-auto"></div></div>
+            </div>
+        </div>
+
+        <!-- Reports View -->
+        <div id="reports-view" class="hidden">
+             <div class="bg-white p-6 rounded-lg shadow-sm">
+                <h2 class="text-2xl font-bold mb-4">Reportes de Venta</h2>
+                <div class="flex flex-wrap gap-4 mb-6 border-b pb-4 items-end">
+                    <div><label for="report-date" class="block text-gray-700 font-medium mb-1">Reporte Diario</label><input type="date" id="report-date" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"></div>
+                    <div><label for="report-month" class="block text-gray-700 font-medium mb-1">Reporte Mensual</label><input type="month" id="report-month" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"></div>
+                    <button id="generate-report-btn" class="bg-[var(--primary-color)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--primary-hover-color)]">Generar Reporte</button>
+                    <button id="export-csv-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 hidden"><i class="fas fa-file-csv mr-2"></i>Exportar a CSV</button>
+                </div>
+                <div id="report-output" class="space-y-4"><p class="text-gray-500">Seleccione una fecha o mes y genere un reporte.</p></div>
+                <div id="report-sales-list-container" class="mt-6"></div>
+            </div>
+        </div>
+
+        <!-- Daily Summary View -->
+        <div id="daily-summary-view" class="hidden">
+             <div class="bg-white p-6 rounded-lg shadow-sm">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Cuadre de Caja del Día</h2>
+                    <div class="flex gap-4">
+                        <button id="print-summary-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700"><i class="fas fa-print mr-2"></i>Imprimir Resumen</button>
+                        <button id="export-reconciliation-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700"><i class="fas fa-file-csv mr-2"></i>Exportar</button>
+                        <button id="back-to-pos-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600"><i class="fas fa-arrow-left mr-2"></i>Volver al POS</button>
+                        <button id="exit-kiosk-btn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700"><i class="fas fa-power-off mr-2"></i>Salir</button>
+                    </div>
+                </div>
+                <div class="mb-6 p-4 border rounded-lg bg-gray-50">
+                    <h3 class="text-lg font-semibold mb-3">Retirar Dinero de Caja</h3>
+                    <form id="cash-withdrawal-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div><label for="withdrawal-amount" class="block text-sm font-medium text-gray-700">Monto (DOP)</label><input type="number" id="withdrawal-amount" inputmode="decimal" min="0.01" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg" required></div>
+                        <div><label for="withdrawal-reason" class="block text-sm font-medium text-gray-700">Razón del Retiro</label><input type="text" id="withdrawal-reason" inputmode="text" class="mt-1 w-full px-3 py-2 border rounded-lg" required></div>
+                        <button type="submit" class="bg-[var(--primary-color)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--primary-hover-color)]"><i class="fas fa-minus-circle mr-2"></i>Registrar Retiro</button>
+                    </form>
+                </div>
+                <div id="reconciliation-card-container"></div>
+                <div id="daily-sales-list-container" class="mt-6"></div>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="settings-view" class="hidden">
+            <div class="bg-white p-6 rounded-lg shadow-sm max-w-2xl mx-auto">
+                <h2 class="text-2xl font-bold mb-6">Ajustes de la Aplicación</h2>
+                <div class="border-t pt-6">
+                    <h3 class="text-xl font-semibold mb-4">Cambiar PIN de Administrador</h3>
+                    <form id="change-pin-form" class="space-y-4">
+                        <div><label for="current-pin" class="block text-gray-700 font-medium mb-2">PIN Actual</label><input type="password" id="current-pin" inputmode="numeric" class="w-full px-4 py-2 border rounded-lg" required></div>
+                        <div><label for="new-pin" class="block text-gray-700 font-medium mb-2">Nuevo PIN (4 dígitos)</label><input type="password" id="new-pin" inputmode="numeric" maxlength="4" class="w-full px-4 py-2 border rounded-lg" required></div>
+                        <div><label for="confirm-new-pin" class="block text-gray-700 font-medium mb-2">Confirmar Nuevo PIN</label><input type="password" id="confirm-new-pin" inputmode="numeric" maxlength="4" class="w-full px-4 py-2 border rounded-lg" required></div>
+                        <p id="change-pin-message" class="h-5 text-center"></p>
+                        <button type="submit" class="w-full bg-[var(--primary-color)] text-white font-bold py-3 rounded-lg hover:bg-[var(--primary-hover-color)] transition-colors"><i class="fas fa-key mr-2"></i>Actualizar PIN</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Modals -->
+    <div id="payment-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-20">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-3xl m-4">
+            <h2 class="text-2xl font-bold mb-2 select-none">Completar Pago</h2>
+            <p class="text-3xl font-bold text-[var(--primary-color)] mb-6 select-none" id="modal-total-amount">Total: DOP 0.00</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <div class="mb-4">
+                        <label for="customer-name" class="block text-gray-700 font-medium mb-2 select-none">Nombre del Cliente (Opcional)</label>
+                        <input type="text" id="customer-name" inputmode="text" class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="cash-received" class="block text-gray-700 font-medium mb-2 select-none">Efectivo Recibido (DOP)</label>
+                        <input type="text" inputmode="decimal" id="cash-received" class="w-full px-4 py-3 text-2xl border rounded-lg" placeholder="0.00" readonly>
+                        <p id="cash-error-message" class="text-red-600 text-sm mt-1 h-5 text-center font-medium"></p>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-gray-700 font-medium mb-2 select-none">Método de Pago</label>
+                        <div class="payment-methods" id="payment-methods">
+                            <label class="payment-radio-btn selected select-none" data-method="cash">
+                                <input type="radio" name="payment-method" value="cash" checked>
+                                <i class="fas fa-money-bill-wave mr-2"></i> Efectivo
+                            </label>
+                            <label class="payment-radio-btn select-none" data-method="transfer">
+                                <input type="radio" name="payment-method" value="transfer">
+                                <i class="fas fa-university mr-2"></i> Transferencia
+                            </label>
+                            <label class="payment-radio-btn select-none" data-method="credit">
+                                <input type="radio" name="payment-method" value="credit">
+                                <i class="fas fa-credit-card mr-2"></i> Crédito
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <button id="cancel-payment-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600">Cancelar</button>
+                        <button id="calculate-change-btn" class="bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 disabled:bg-gray-300" disabled>Calcular Cambio</button>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center">
+                    <div id="payment-keypad"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="confirm-change-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-30">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md m-4 text-center"><h2 class="text-2xl font-bold mb-4">Confirmar Venta</h2><p class="text-lg text-gray-600">Devuelta para el cliente:</p><p class="text-5xl font-bold text-green-600 my-4" id="change-due-confirm">DOP 0.00</p><div class="grid grid-cols-2 gap-4 mt-8"><button id="back-to-payment-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600"><i class="fas fa-arrow-left mr-2"></i>Atrás</button><button id="confirm-payment-btn" class="bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600"><i class="fas fa-check-circle mr-2"></i>Confirmar Venta</button></div></div>
+    </div>
+    <div id="receipt-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-40">
+        <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm m-4"><h2 class="text-xl font-bold mb-4 text-center">Venta Completada</h2><div id="receipt-preview" class="border rounded-lg p-4 mb-6 max-h-80 overflow-y-auto bg-gray-50"></div><div class="grid grid-cols-2 gap-4"><button id="no-print-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600"><i class="fas fa-times mr-2"></i>No Imprimir</button><button id="print-receipt-btn" class="bg-[var(--primary-color)] text-white font-bold py-3 rounded-lg hover:bg-[var(--primary-hover-color)]"><i class="fas fa-print mr-2"></i>Imprimir</button></div><div class="mt-4"><button id="cancel-transaction-btn" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700"><i class="fas fa-undo mr-2"></i>Cancelar Transacción</button></div></div>
+    </div>
+    <div id="cancel-confirm-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md m-4 text-center"><h2 class="text-2xl font-bold mb-4">¿Cancelar Transacción?</h2><p class="text-gray-600 mb-6">Esta acción eliminará la última venta permanentemente. No se puede deshacer.</p><div class="grid grid-cols-2 gap-4"><button id="cancel-confirm-no-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600">No, mantener</button><button id="cancel-confirm-yes-btn" class="bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700">Sí, Cancelar</button></div></div>
+    </div>
+    <div id="custom-product-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-3xl m-4">
+            <h2 class="text-2xl font-bold mb-4">Agregar Producto Personalizado</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <form id="custom-product-form">
+                    <div class="mb-4">
+                        <label for="custom-product-name" class="block text-gray-700 font-medium mb-2">Nombre (Opcional)</label>
+                        <input type="text" id="custom-product-name" inputmode="text" class="w-full px-4 py-2 border rounded-lg" placeholder="Ej: Especial del Chef">
+                    </div>
+                    <div class="mb-4">
+                        <label for="custom-product-price" class="block text-gray-700 font-medium mb-2">Precio (DOP)</label>
+                        <input type="text" id="custom-product-price" inputmode="decimal" class="w-full px-4 py-2 border rounded-lg" required readonly>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mt-6">
+                        <button type="button" id="cancel-custom-product-btn" class="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600">Cancelar</button>
+                        <button type="submit" class="bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600">Agregar a la Orden</button>
+                    </div>
+                </form>
+                <div class="flex justify-center">
+                    <div id="custom-product-keypad"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="print-area"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const views = { pos: document.getElementById('pos-view'), products: document.getElementById('products-view'), reports: document.getElementById('reports-view'), dailySummary: document.getElementById('daily-summary-view'), settings: document.getElementById('settings-view') };
+        const navLinks = { pos: document.getElementById('nav-pos'), products: document.getElementById('nav-products'), reports: document.getElementById('nav-reports'), settings: document.getElementById('nav-settings') };
+        const productGridContainer = document.getElementById('product-grid-container');
+        const orderItemsContainer = document.getElementById('order-items-container');
+        const emptyOrderMessage = document.getElementById('empty-order-message');
+        const orderTotalEl = document.getElementById('order-total');
+        const clearOrderBtn = document.getElementById('clear-order-btn');
+        const payBtn = document.getElementById('pay-btn');
+        const productForm = document.getElementById('product-form');
+        const productFormTitle = document.getElementById('product-form-title');
+        const productIdInput = document.getElementById('product-id');
+        const productNameInput = document.getElementById('product-name');
+        const productPriceInput = document.getElementById('product-price');
+        const productCategoryInput = document.getElementById('product-category');
+        const productImageInput = document.getElementById('product-image');
+        const productFormSubmitBtnText = document.getElementById('product-form-submit-btn-text');
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+        const productListContainer = document.getElementById('product-list-container');
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const productImagePreview = document.getElementById('product-image-preview');
+        const removeImageBtn = document.getElementById('remove-image-btn');
+        const removeImageFlag = document.getElementById('remove-image-flag');
+        const paymentModal = document.getElementById('payment-modal');
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const customerNameInput = document.getElementById('customer-name');
+        const cashReceivedInput = document.getElementById('cash-received');
+        const cashErrorMessage = document.getElementById('cash-error-message');
+        const cancelPaymentBtn = document.getElementById('cancel-payment-btn');
+        const calculateChangeBtn = document.getElementById('calculate-change-btn');
+        const confirmChangeModal = document.getElementById('confirm-change-modal');
+        const changeDueConfirmEl = document.getElementById('change-due-confirm');
+        const backToPaymentBtn = document.getElementById('back-to-payment-btn');
+        const confirmPaymentBtn = document.getElementById('confirm-payment-btn');
+        const receiptModal = document.getElementById('receipt-modal');
+        const receiptPreview = document.getElementById('receipt-preview');
+        const noPrintBtn = document.getElementById('no-print-btn');
+        const printReceiptBtn = document.getElementById('print-receipt-btn');
+        const cancelTransactionBtn = document.getElementById('cancel-transaction-btn');
+        const printArea = document.getElementById('print-area');
+        const cancelConfirmModal = document.getElementById('cancel-confirm-modal');
+        const cancelConfirmYesBtn = document.getElementById('cancel-confirm-yes-btn');
+        const cancelConfirmNoBtn = document.getElementById('cancel-confirm-no-btn');
+        const customProductModal = document.getElementById('custom-product-modal');
+        const customProductForm = document.getElementById('custom-product-form');
+        const cancelCustomProductBtn = document.getElementById('cancel-custom-product-btn');
+        const customProductNameInput = document.getElementById('custom-product-name');
+        const customProductPriceInput = document.getElementById('custom-product-price');
+        const reportDateInput = document.getElementById('report-date');
+        const reportMonthInput = document.getElementById('report-month');
+        const generateReportBtn = document.getElementById('generate-report-btn');
+        const exportCsvBtn = document.getElementById('export-csv-btn');
+        const reportOutput = document.getElementById('report-output');
+        const reportSalesListContainer = document.getElementById('report-sales-list-container');
+        const dailySalesCounter = document.getElementById('daily-sales-counter');
+        const currentDateEl = document.getElementById('current-date');
+        const dailyResumeBtn = document.getElementById('daily-resume-btn');
+        const backToPosBtn = document.getElementById('back-to-pos-btn');
+        const exitKioskBtn = document.getElementById('exit-kiosk-btn');
+        const reconciliationCardContainer = document.getElementById('reconciliation-card-container');
+        const cashWithdrawalForm = document.getElementById('cash-withdrawal-form');
+        const withdrawalAmountInput = document.getElementById('withdrawal-amount');
+        const withdrawalReasonInput = document.getElementById('withdrawal-reason');
+        const exportReconciliationBtn = document.getElementById('export-reconciliation-btn');
+        const dailySalesListContainer = document.getElementById('daily-sales-list-container');
+        const currentUserEl = { name: document.getElementById('current-user-name'), role: document.getElementById('current-user-role') };
+        const pinModal = document.getElementById('pin-modal');
+        const pinForm = document.getElementById('pin-form');
+        const pinInput = document.getElementById('pin-input');
+        const pinError = document.getElementById('pin-error');
+        const pinCancelBtn = document.getElementById('pin-cancel-btn');
+        const changePinForm = document.getElementById('change-pin-form');
+        const pinMessage = document.getElementById('change-pin-message');
+        const printSummaryBtn = document.getElementById('print-summary-btn');
+
+        const numericKeypad = `
+        <div class="grid grid-cols-3 gap-3 w-64">
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">7</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">8</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">9</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">4</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">5</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">6</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">1</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">2</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">3</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">0</button>
+            <button class="numpad-btn bg-gray-200 hover:bg-gray-300 text-2xl font-bold py-5 rounded-lg select-none">.</button>
+            <button class="numpad-clear bg-red-200 hover:bg-red-300 text-2xl font-bold py-5 rounded-lg select-none">C</button>
+        </div>`;
+
+        document.getElementById('payment-keypad').innerHTML = numericKeypad;
+        document.getElementById('custom-product-keypad').innerHTML = numericKeypad;
+
+        // Función para manejar el teclado numérico
+        function handleNumericKeypad(container, inputElement) {
+            container.addEventListener('click', (e) => {
+                const btn = e.target.closest('.numpad-btn, .numpad-clear');
+                if (!btn) return;
+
+                const currentValue = inputElement.value;
+                
+                if (btn.classList.contains('numpad-clear')) {
+                    inputElement.value = '';
+                } else {
+                    const digit = btn.textContent;
+                    if (digit === '.' && currentValue.includes('.')) return;
+                    inputElement.value = currentValue + digit;
+                }
+
+                // Disparar evento de input para activar los listeners existentes
+                inputElement.dispatchEvent(new Event('input'));
+            });
+        }
+
+        // Inicializar los teclados numéricos
+        handleNumericKeypad(
+            document.getElementById('payment-keypad'),
+            document.getElementById('cash-received')
+        );
+        handleNumericKeypad(
+            document.getElementById('custom-product-keypad'),
+            document.getElementById('custom-product-price')
+        );
+
+        const paymentMethodsEl = document.getElementById('payment-methods');
+        paymentMethodsEl.addEventListener('click', (e) => {
+            const label = e.target.closest('.payment-radio-btn');
+            if (!label) return;
+            // Desmarcar todos
+            paymentMethodsEl.querySelectorAll('.payment-radio-btn').forEach(el => el.classList.remove('selected'));
+            // Marcar el seleccionado
+            label.classList.add('selected');
+            // Activar radio
+            label.querySelector('input[type="radio"]').checked = true;
+        });
+        
+        // --- LOCAL STATE & FILE SYSTEM VARIABLES ---
+        let state = {
+            products: [], currentOrder: [], sales: [], cashWithdrawals: [],
+            users: [
+                { id: 'user-1', name: 'Admin', role: 'admin' },
+                { id: 'user-2', name: 'Cajera', role: 'cajero' }
+            ],
+            settings: {
+                adminPin: '1234' // Default PIN
+            },
+            currentUser: 'user-1', // Default to admin
+            currentView: 'pos',
+            paymentDetails: { total: 0, cash: 0, change: 0 }
+        };
+        let lastCompletedSale = null;
+        let salesChartInstance = null;
+        let fileHandle = null;
+        let pinSuccessCallback = null;
+
+        // --- UTILITY & FILE SYSTEM FUNCTIONS ---
+        const formatCurrency = (amount) => `DOP ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const fileToBase64 = (file) => new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = error => reject(error); });
+        const idbPromise = new Promise((resolve, reject) => { const request = indexedDB.open('pos-db', 1); request.onupgradeneeded = () => request.result.createObjectStore('store'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+        async function idbGet(key) { const db = await idbPromise; return await new Promise((resolve, reject) => { const tx = db.transaction('store').objectStore('store').get(key); tx.onsuccess = () => resolve(tx.result); tx.onerror = () => reject(tx.error); }); }
+        async function idbSet(key, val) { const db = await idbPromise; return await new Promise((resolve, reject) => { const tx = db.transaction('store', 'readwrite'); tx.objectStore('store').put(val, key); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); }
+        
+        async function saveDataToFile() {
+            if (!fileHandle) return;
+            try {
+                const writable = await fileHandle.createWritable();
+                const stateToSave = { ...state };
+                // Don't save transient state properties
+                delete stateToSave.currentView;
+                delete stateToSave.paymentDetails;
+                delete stateToSave.currentOrder;
+                
+                await writable.write(JSON.stringify(stateToSave, null, 2));
+                await writable.close();
+            } catch (error) { console.error('Error saving data:', error); alert('No se pudo guardar la información.'); }
+        }
+
+        async function loadDataFromFile() {
+            try {
+                const file = await fileHandle.getFile();
+                const contents = await file.text();
+                if (contents) {
+                    const loadedState = JSON.parse(contents);
+                    state.products = loadedState.products || [];
+                    state.sales = loadedState.sales || [];
+                    state.cashWithdrawals = loadedState.cashWithdrawals || [];
+                    state.users = loadedState.users || state.users;
+                    state.settings = loadedState.settings || state.settings;
+                    state.currentUser = loadedState.currentUser || state.currentUser;
+                }
+                if (state.products.length === 0) {
+                    populateDefaultProducts();
+                    await saveDataToFile();
+                }
+            } catch (error) { console.error('Error loading data:', error); alert('No se pudo cargar el archivo de datos.'); }
+        }
+
+        function populateDefaultProducts() {
+            state.products = [ { id: 'prod-1', name: 'Arroz Blanco', price: 75.00, imageUrl: null, category: 'Arroces' }, { id: 'prod-2', name: 'Moro', price: 100.00, imageUrl: null, category: 'Arroces' }, { id: 'prod-3', name: 'Locrio', price: 125.00, imageUrl: null, category: 'Arroces' }, { id: 'prod-4', name: 'Res Guisada', price: 250.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-5', name: 'Pollo Guisado', price: 200.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-6', name: 'Pollo Frito', price: 225.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-7', name: 'Chuleta BBQ', price: 275.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-8', name: 'Bacalao', price: 300.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-9', name: 'Pechuga G. Blue', price: 350.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-10', name: 'Pechuga Plancha', price: 300.00, imageUrl: null, category: 'Carnes' }, { id: 'prod-11', name: 'Arepita', price: 50.00, imageUrl: null, category: 'Acompañantes' }, { id: 'prod-12', name: 'Frito Maduro', price: 50.00, imageUrl: null, category: 'Acompañantes' }, { id: 'prod-13', name: 'Tostones', price: 60.00, imageUrl: null, category: 'Acompañantes' }, { id: 'prod-14', name: 'Refresco 1/2 Litro', price: 75.00, imageUrl: null, category: 'Bebidas' }, { id: 'prod-15', name: 'Refresco 16oz', price: 50.00, imageUrl: null, category: 'Bebidas' }, { id: 'prod-16', name: 'Botella de Agua', price: 40.00, imageUrl: null, category: 'Bebidas' }, { id: 'prod-17', name: 'Jugo Natural', price: 100.00, imageUrl: null, category: 'Bebidas' } ];
+        }
+
+        // --- RENDER FUNCTIONS ---
+        const render = () => { renderProductsGrid(); renderCurrentOrder(); renderProductList(); updatePaymentButtons(); updateDailyInfo(); updateUserInfo(); };
+        const renderProductsGrid = () => { productGridContainer.innerHTML = ''; let gridHTML = ``; if (state.products.length === 0) { productGridContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No hay productos. Agregue productos en la pestaña 'Productos'.</p>`; return; } const orderItemIds = new Set(state.currentOrder.map(item => item.id)); const productsByCategory = state.products.reduce((acc, product) => { const category = product.category || 'Sin Categoría'; if (!acc[category]) acc[category] = []; acc[category].push(product); return acc; }, {}); const categoryOrder = ['Arroces', 'Carnes', 'Acompañantes', 'Bebidas']; const sortedCategories = Object.keys(productsByCategory).sort((a, b) => { const indexA = categoryOrder.indexOf(a); const indexB = categoryOrder.indexOf(b); if (indexA === -1 && indexB === -1) return a.localeCompare(b); if (indexA === -1) return 1; if (indexB === -1) return -1; return indexA - indexB; }); sortedCategories.forEach(category => { gridHTML += `<div class="col-span-full pt-4"><div class="relative"><div class="absolute inset-0 flex items-center" aria-hidden="true"><div class="w-full border-t border-gray-300"></div></div><div class="relative flex justify-start"><span class="bg-white pr-3 text-lg font-medium text-gray-900">${category}</span></div></div></div>`; productsByCategory[category].forEach(product => { const isSelected = orderItemIds.has(product.id); gridHTML += `<button class="product-card bg-white p-2 rounded-lg shadow-md hover:shadow-lg transition-all text-center focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] ${isSelected ? 'selected' : ''}" data-product-id="${product.id}">${product.imageUrl ? `<img src="${product.imageUrl}" alt="${product.name}" class="product-card-img" onerror="this.style.display='none'">` : ''}<div class="font-bold text-lg mt-2">${product.name}</div><div class="text-gray-600">${formatCurrency(product.price)}</div></button>`; }); }); productGridContainer.innerHTML = gridHTML; };
+        const renderCurrentOrder = () => { orderItemsContainer.innerHTML = ''; if (state.currentOrder.length === 0) { emptyOrderMessage.classList.remove('hidden'); } else { emptyOrderMessage.classList.add('hidden'); state.currentOrder.forEach(item => { const div = document.createElement('div'); div.className = 'flex items-center justify-between py-2 border-b'; div.innerHTML = `<div><p class="font-semibold">${item.name}</p><p class="text-sm text-gray-500">${formatCurrency(item.price)}</p></div><div class="flex items-center gap-3"><span class="font-bold w-6 text-center">${item.quantity}</span><button class="quantity-change-btn text-gray-500 hover:text-red-500" data-id="${item.id}" data-change="-1"><i class="fas fa-minus-circle text-lg"></i></button><button class="quantity-change-btn text-gray-500 hover:text-green-500" data-id="${item.id}" data-change="1"><i class="fas fa-plus-circle text-lg"></i></button></div><span class="font-semibold w-24 text-right">${formatCurrency(item.price * item.quantity)}</span>`; orderItemsContainer.appendChild(div); }); } updateOrderSummary(); };
+        const renderProductList = () => { productListContainer.innerHTML = ''; if(state.products.length === 0){ productListContainer.innerHTML = `<p class="text-gray-500 text-center">No se encontraron productos.</p>`; return; } state.products.forEach(product => { const div = document.createElement('div'); div.className = 'flex items-center justify-between bg-gray-50 p-3 rounded-lg'; div.innerHTML = `<div class="flex items-center gap-4">${product.imageUrl ? `<img src="${product.imageUrl}" alt="${product.name}" class="w-16 h-10 object-cover rounded-md" onerror="this.style.display='none'">` : '<div class="w-16 h-10"></div>'}<div><p class="font-semibold">${product.name}</p><p class="text-sm text-gray-600">${formatCurrency(product.price)}</p></div></div><div class="flex gap-2"><button class="edit-product-btn text-blue-500 hover:text-blue-700" data-id="${product.id}"><i class="fas fa-edit"></i></button><button class="delete-product-btn text-red-500 hover:text-red-700" data-id="${product.id}"><i class="fas fa-trash"></i></button></div>`; productListContainer.appendChild(div); }); };
+        const updateOrderSummary = () => { const total = state.currentOrder.reduce((sum, item) => sum + (item.price * item.quantity), 0); orderTotalEl.textContent = formatCurrency(total); };
+        const updatePaymentButtons = () => { const disabled = state.currentOrder.length === 0; clearOrderBtn.disabled = disabled; payBtn.disabled = disabled; };
+        const updateDailyInfo = () => { const today = new Date(); currentDateEl.textContent = today.toLocaleDateString('es-DO'); const startOfToday = new Date(new Date().setHours(0, 0, 0, 0)); const todaySales = state.sales.filter(sale => new Date(sale.timestamp) >= startOfToday); dailySalesCounter.textContent = todaySales.length; };
+        const updateUserInfo = () => { const user = state.users.find(u => u.id === state.currentUser); if (user) { currentUserEl.name.textContent = user.name; currentUserEl.role.textContent = user.role; }};
+
+        // --- Security & PIN Modal ---
+        const showPinModal = (onSuccess) => {
+            const user = state.users.find(u => u.id === state.currentUser);
+            if (user && user.role === 'admin') {
+                onSuccess(); // Admin doesn't need to enter PIN for their own actions
+                return;
+            }
+            pinSuccessCallback = onSuccess;
+            pinForm.reset();
+            pinError.textContent = '';
+            pinModal.classList.add('flex');
+            pinInput.focus();
+        };
+        pinForm.addEventListener('submit', (e) => { e.preventDefault(); if (pinInput.value === state.settings.adminPin) { pinModal.classList.remove('flex'); if (pinSuccessCallback) pinSuccessCallback(); pinSuccessCallback = null; } else { pinError.textContent = 'PIN incorrecto.'; pinInput.value = ''; pinInput.focus(); } });
+        pinCancelBtn.addEventListener('click', () => { pinModal.classList.remove('flex'); pinSuccessCallback = null; });
+        
+        // --- EVENT HANDLERS & LOGIC ---
+        const addToOrder = (productId) => { const product = state.products.find(p => p.id === productId); if (!product) return; const existingItem = state.currentOrder.find(item => item.id === productId); if (existingItem) { existingItem.quantity++; } else { state.currentOrder.push({ ...product, quantity: 1 }); } render(); };
+        const switchView = (viewName) => { state.currentView = viewName; Object.keys(views).forEach(key => views[key].classList.toggle('hidden', key !== viewName)); Object.keys(navLinks).forEach(key => navLinks[key].classList.toggle('active', key === viewName)); };
+        Object.keys(navLinks).forEach(key => navLinks[key].addEventListener('click', () => switchView(key)));
+        dailyResumeBtn.addEventListener('click', () => { renderReconciliationView(); switchView('dailySummary'); });
+        backToPosBtn.addEventListener('click', () => switchView('pos'));
+        exitKioskBtn.addEventListener('click', () => {
+            showPinModal(() => {
+                // NOTE: window.close() may not work in all browsers or contexts 
+                // (e.g., PWAs not opened by a script). This is the standard method
+                // for attempting to close the application window.
+                window.close();
+            });
+        });
+        productGridContainer.onclick = (e) => {
+            const target = e.target;
+            const productCard = target.closest('.product-card');
+            if (productCard) {
+                const productId = productCard.dataset.productId;
+                addToOrder(productId);
+            }
+        };
+        orderItemsContainer.addEventListener('click', (e) => { const button = e.target.closest('.quantity-change-btn'); if (!button) return; const productIdStr = button.dataset.id; const change = parseInt(button.dataset.change); const item = state.currentOrder.find(i => String(i.id) === productIdStr); if (item) { item.quantity += change; if (item.quantity <= 0) { state.currentOrder = state.currentOrder.filter(i => String(i.id) !== productIdStr); } } render(); });
+        clearOrderBtn.addEventListener('click', () => { state.currentOrder = []; render(); });
+        payBtn.addEventListener('click', () => { const total = state.currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0); state.paymentDetails.total = total; modalTotalAmount.textContent = `Total: ${formatCurrency(total)}`; cashReceivedInput.value = ''; customerNameInput.value = ''; cashErrorMessage.textContent = ''; calculateChangeBtn.disabled = true; paymentModal.classList.add('flex'); cashReceivedInput.focus(); });
+        
+        document.getElementById('add-custom-product-btn').addEventListener('click', () => {
+            customProductForm.reset();
+            customProductModal.classList.add('flex');
+            document.getElementById('custom-product-price').value = '';
+            document.getElementById('custom-product-name').focus();
+        });
+
+        customProductForm.addEventListener('submit', (e) => { e.preventDefault(); const name = customProductNameInput.value.trim() || 'Personalizado'; const price = parseFloat(customProductPriceInput.value); if (isNaN(price) || price <= 0) return alert('Precio inválido.'); state.currentOrder.push({ id: `custom-${Date.now()}`, name, price, quantity: 1 }); customProductModal.classList.remove('flex'); render(); });
+        cancelCustomProductBtn.addEventListener('click', () => customProductModal.classList.remove('flex'));
+        
+        // Product Form Logic
+        productForm.addEventListener('submit', async (e) => { e.preventDefault(); const id = productIdInput.value; const name = productNameInput.value.trim(); const price = parseFloat(productPriceInput.value); const category = productCategoryInput.value.trim(); const imageFile = productImageInput.files[0]; if (!name || !category || isNaN(price) || price < 0) return alert('Por favor complete todos los campos.'); if (id) { const product = state.products.find(p => p.id === id); if (product) { product.name = name; product.price = price; product.category = category; if (removeImageFlag.value === 'true') { product.imageUrl = null; } else if (imageFile) { product.imageUrl = await fileToBase64(imageFile); } } } else { let imageUrl = null; if (imageFile) imageUrl = await fileToBase64(imageFile); const newProduct = { id: `prod-${Date.now()}`, name, price, category, imageUrl }; state.products.push(newProduct); } await saveDataToFile(); resetProductForm(); render(); });
+        cancelEditBtn.addEventListener('click', resetProductForm);
+        productListContainer.addEventListener('click', async (e) => { const editButton = e.target.closest('.edit-product-btn'); const deleteButton = e.target.closest('.delete-product-btn'); if (editButton) { const productId = editButton.dataset.id; const product = state.products.find(p => p.id === productId); if (product) { productFormTitle.textContent = 'Editar Producto'; productIdInput.value = product.id; productNameInput.value = product.name; productPriceInput.value = product.price; productCategoryInput.value = product.category || ''; productFormSubmitBtnText.textContent = 'Actualizar Producto'; cancelEditBtn.classList.remove('hidden'); if (product.imageUrl) { imagePreviewContainer.classList.remove('hidden'); productImagePreview.src = product.imageUrl; removeImageFlag.value = 'false'; } else { imagePreviewContainer.classList.add('hidden'); } } } if (deleteButton) { if (confirm('¿Está seguro de que desea eliminar este producto?')) { const productId = deleteButton.dataset.id; state.products = state.products.filter(p => p.id !== productId); await saveDataToFile(); render(); } } });
+        removeImageBtn.addEventListener('click', () => { imagePreviewContainer.classList.add('hidden'); removeImageFlag.value = 'true'; productImageInput.value = ''; });
+        function resetProductForm() { productForm.reset(); productIdInput.value = ''; productFormTitle.textContent = 'Agregar Nuevo Producto'; productFormSubmitBtnText.textContent = 'Guardar Producto'; cancelEditBtn.classList.add('hidden'); imagePreviewContainer.classList.add('hidden'); removeImageFlag.value = 'false'; }
+
+        // Payment Flow
+        cashReceivedInput.addEventListener('input', () => { const cash = parseFloat(cashReceivedInput.value.replace(/[^0-9.]/g, '')) || 0; const total = state.paymentDetails.total; cashErrorMessage.textContent = (cash > 0 && cash < total) ? 'Efectivo insuficiente' : ''; calculateChangeBtn.disabled = cash < total; });
+        cancelPaymentBtn.addEventListener('click', () => paymentModal.classList.remove('flex'));
+        calculateChangeBtn.addEventListener('click', () => { const cash = parseFloat(cashReceivedInput.value.replace(/[^0-9.]/g, '')); if(isNaN(cash) || cash < state.paymentDetails.total) return alert('El efectivo debe ser mayor o igual al total.'); state.paymentDetails.cash = cash; state.paymentDetails.change = cash - state.paymentDetails.total; changeDueConfirmEl.textContent = formatCurrency(state.paymentDetails.change); paymentModal.classList.remove('flex'); confirmChangeModal.classList.add('flex'); });
+        backToPaymentBtn.addEventListener('click', () => { confirmChangeModal.classList.remove('flex'); paymentModal.classList.add('flex'); cashReceivedInput.focus(); });
+        confirmPaymentBtn.addEventListener('click', async () => {
+            const customerName = customerNameInput.value.trim();
+            const paymentMethod = document.querySelector('input[name="payment-method"]:checked').value;
+            
+            const newSale = {
+                id: `sale-${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                items: [...state.currentOrder],
+                total: state.paymentDetails.total,
+                cashReceived: state.paymentDetails.cash,
+                changeGiven: state.paymentDetails.change,
+                customerName: customerName || null,
+                paymentMethod: paymentMethod
+            };
+            state.sales.push(newSale);
+            await saveDataToFile();
+            lastCompletedSale = newSale;
+            confirmChangeModal.classList.remove('flex');
+            generateReceipt(lastCompletedSale);
+            receiptModal.classList.add('flex');
+            state.currentOrder = [];
+            render();
+        });
+
+        // Receipt & Transaction Cancellation
+        const generateReceipt = (sale) => {
+            let methodLabel = '';
+            switch (sale.paymentMethod) {
+                case 'cash': methodLabel = 'Efectivo'; break;
+                case 'transfer': methodLabel = 'Transferencia'; break;
+                case 'credit': methodLabel = 'Crédito'; break;
+                default: methodLabel = sale.paymentMethod;
+            }
+            let receiptHTML = `<div style="font-size: 12px; color: #000;">
+                <img src="https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png" alt="Logo" style="width: 60px; margin: 0 auto 10px; display: block;">
+                <h3 style="text-align: center; margin-bottom: 5px; font-size: 14px;">Nelly Buffet</h3>
+                <p style="text-align: center; font-size: 10px; margin: 0;">C/ Summer Welles, #26</p>
+                <p style="text-align: center; font-size: 10px; margin: 0 0 10px 0;">Santo Domingo, Rep. Dom.</p>
+                <p>Fecha: ${new Date(sale.timestamp).toLocaleString('es-DO')}</p>
+                <p>Venta ID: ${sale.id.slice(-6)}</p>
+                ${sale.customerName ? `<p>Cliente: ${sale.customerName}</p>` : ''}
+                <hr style="border-top: 1px dashed; margin: 10px 0;">
+            `;
+            sale.items.forEach(item => {
+                const itemTotal = (item.price * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                receiptHTML += `<div style="display: flex; justify-content: space-between;"><span>${item.quantity}x ${item.name}</span><span>${itemTotal}</span></div>`;
+            });
+            const total = sale.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const cashReceived = sale.cashReceived.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const changeGiven = sale.changeGiven.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            receiptHTML += `
+                <hr style="border-top: 1px dashed; margin: 10px 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                    <strong>TOTAL:</strong> <strong>${total}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <strong>Método de pago:</strong> <span>${methodLabel}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <strong>Recibido:</strong> <span>${cashReceived}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <strong>Devuelta:</strong> <span>${changeGiven}</span>
+                </div>
+                <hr style="border-top: 1px dashed; margin: 10px 0;">
+                <p style="text-align: center;">¡Gracias por su compra!</p>
+            </div>`;
+            receiptPreview.innerHTML = receiptHTML;
+            printArea.innerHTML = receiptHTML;
+        };
+
+        const resetPaymentMethod = () => {
+            // Reiniciar método de pago a EFECTIVO
+            const paymentMethodsEl = document.getElementById('payment-methods');
+            if (paymentMethodsEl) {
+                // Desmarcar todos los botones
+                paymentMethodsEl.querySelectorAll('.payment-radio-btn').forEach(el => el.classList.remove('selected'));
+                // Seleccionar el de efectivo y marcar el radio
+                const cashBtn = paymentMethodsEl.querySelector('.payment-radio-btn[data-method="cash"]');
+                if (cashBtn) {
+                    cashBtn.classList.add('selected');
+                    cashBtn.querySelector('input[type="radio"]').checked = true;
+                }
+            }
+        };
+
+        noPrintBtn.addEventListener('click', () => {
+            receiptModal.classList.remove('flex');
+            resetPaymentMethod();
+        });
+        printReceiptBtn.addEventListener('click', () => {
+            document.body.classList.add('printing-receipt');
+            window.print();
+            document.body.classList.remove('printing-receipt');
+            receiptModal.classList.remove('flex');
+            resetPaymentMethod();
+        });
+        cancelTransactionBtn.addEventListener('click', () => showPinModal(() => cancelConfirmModal.classList.add('flex')) );
+        cancelConfirmNoBtn.addEventListener('click', () => cancelConfirmModal.classList.remove('flex'));
+        cancelConfirmYesBtn.addEventListener('click', async () => { if (!lastCompletedSale) return; state.sales = state.sales.filter(s => s.id !== lastCompletedSale.id); await saveDataToFile(); cancelConfirmModal.classList.remove('flex'); receiptModal.classList.remove('flex'); lastCompletedSale = null; render(); });
+
+        // Reports
+        generateReportBtn.addEventListener('click', () => { reportOutput.innerHTML = ''; const dateVal = reportDateInput.value; const monthVal = reportMonthInput.value; if (dateVal) generateDailyReport(dateVal); else if (monthVal) generateMonthlyReport(monthVal); else alert('Por favor seleccione una fecha o un mes.'); });
+        exportCsvBtn.addEventListener('click', () => {
+            if (!state.lastReportData || state.lastReportData.length === 0) return alert("No hay datos para exportar.");
+            let csvContent = "data:text/csv;charset=utf-8,ID Venta,Fecha,Hora,Metodo de Pago,Total,Cliente,Items\r\n";
+            state.lastReportData.forEach(sale => {
+                const date = new Date(sale.timestamp);
+                const items = sale.items.map(item => `${item.quantity}x ${item.name}`).join('; ');
+                const paymentMethodText = (sale.paymentMethod === 'cash' || !sale.paymentMethod) ? 'Efectivo' : sale.paymentMethod === 'transfer' ? 'Transferencia' : 'Crédito';
+                const row = [
+                    sale.id,
+                    date.toLocaleDateString('es-DO'),
+                    date.toLocaleTimeString('es-DO'),
+                    paymentMethodText,
+                    sale.total.toFixed(2),
+                    `"${sale.customerName || ''}"`,
+                    `"${items}"`
+                ].join(',');
+                csvContent += row + "\r\n";
+            });
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `reporte_ventas_${reportDateInput.value || reportMonthInput.value}.csv`);
+            link.click();
+        });
+        reportDateInput.addEventListener('change', () => { reportMonthInput.value = ''; }); reportMonthInput.addEventListener('change', () => { reportDateInput.value = ''; });
+        const generateDailyReport = (dateString) => { const targetDate = new Date(dateString); const utcDate = new Date(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), targetDate.getUTCDate()); const dailySales = state.sales.filter(sale => new Date(sale.timestamp).toDateString() === utcDate.toDateString()); displayReport(dailySales, `Reporte para ${utcDate.toLocaleDateString('es-DO')}`); };
+        const generateMonthlyReport = (monthString) => { const [year, month] = monthString.split('-').map(Number); const monthlySales = state.sales.filter(sale => { const saleDate = new Date(sale.timestamp); return saleDate.getFullYear() === year && (saleDate.getMonth() + 1) === month; }); const monthName = new Date(year, month - 1).toLocaleString('es-DO', { month: 'long' }); displayReport(monthlySales, `Reporte para ${monthName} ${year}`); };
+        const displayReport = (salesData, title) => {
+            state.lastReportData = salesData;
+            reportSalesListContainer.innerHTML = '';
+            if (salesData.length === 0) {
+                reportOutput.innerHTML = `<p class="text-gray-500">${title}: No se encontraron datos de ventas.</p>`;
+                exportCsvBtn.classList.add('hidden');
+                return;
+            }
+            exportCsvBtn.classList.remove('hidden');
+            const totalRevenue = salesData.reduce((sum, sale) => sum + sale.total, 0);
+            const totalTransactions = salesData.length;
+            const cashSalesCount = salesData.filter(sale => sale.paymentMethod === 'cash' || !sale.paymentMethod).length;
+            const transferSalesCount = salesData.filter(sale => sale.paymentMethod === 'transfer').length;
+            const creditSalesCount = salesData.filter(sale => sale.paymentMethod === 'credit').length;
+            const productCounts = salesData.flatMap(sale => sale.items).reduce((acc, item) => { acc[item.name] = (acc[item.name] || 0) + item.quantity; return acc; }, {});
+            
+            let reportHTML = `<h3 class="text-xl font-bold">${title}</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+                    <div class="bg-green-100 p-4 rounded-lg text-center">
+                        <p class="text-green-800 font-medium">Ventas Efectivo</p>
+                        <p class="text-3xl font-bold text-green-900">${cashSalesCount}</p>
+                    </div>
+                    <div class="bg-blue-100 p-4 rounded-lg text-center">
+                        <p class="text-blue-800 font-medium">Ventas Transferencia</p>
+                        <p class="text-3xl font-bold text-blue-900">${transferSalesCount}</p>
+                    </div>
+                    <div class="bg-orange-100 p-4 rounded-lg text-center">
+                        <p class="text-orange-800 font-medium">Ventas Crédito</p>
+                        <p class="text-3xl font-bold text-orange-900">${creditSalesCount}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+                    <div class="bg-blue-100 p-4 rounded-lg">
+                        <p class="text-blue-800 font-medium">Ingresos Totales</p>
+                        <p class="text-3xl font-bold text-blue-900">${formatCurrency(totalRevenue)}</p>
+                    </div>
+                    <div class="bg-green-100 p-4 rounded-lg">
+                        <p class="text-green-800 font-medium">Transacciones Totales</p>
+                        <p class="text-3xl font-bold text-green-900">${totalTransactions}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div><h4 class="font-semibold mb-2">Productos Vendidos:</h4><div class="space-y-2 max-h-60 overflow-y-auto border p-2 rounded-lg bg-gray-50">${Object.entries(productCounts).sort((a,b) => b[1] - a[1]).map(([name, count]) => `<div class="flex justify-between p-2"><span>${name}</span><span class="font-bold">${count}</span></div>`).join('')}</div></div>
+                    <div><h4 class="font-semibold mb-2">Gráfica</h4><canvas id="sales-chart"></canvas></div>
+                </div>`;
+            reportOutput.innerHTML = reportHTML;
+            renderSalesList(salesData, reportSalesListContainer, 'Detalle de Ventas');
+            const chartCanvas = document.getElementById('sales-chart');
+            if (salesChartInstance) salesChartInstance.destroy();
+            const sortedProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]);
+            salesChartInstance = new Chart(chartCanvas, { type: 'bar', data: { labels: sortedProducts.map(p => p[0]), datasets: [{ label: 'Cantidad Vendida', data: sortedProducts.map(p => p[1]), backgroundColor: 'rgba(229, 108, 48, 0.7)', borderColor: 'rgba(229, 108, 48, 1)', borderWidth: 1 }] }, options: { indexAxis: 'y', scales: { x: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+        };
+        
+        // Daily Reconciliation
+        const renderSalesList = (salesData, container, title) => {
+            if (salesData.length === 0) { container.innerHTML = ''; return; }
+            container.innerHTML = `<h3 class="text-lg font-semibold mt-6 mb-2">${title}</h3><div class="max-h-64 overflow-y-auto border rounded-md"><table class="w-full text-sm text-left text-gray-500"><thead class="text-xs text-gray-700 uppercase bg-gray-100"><tr><th class="px-4 py-3">ID Venta</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Método de Pago</th><th class="px-4 py-3 text-right">Monto</th><th class="px-4 py-3 text-center">Acciones</th></tr></thead><tbody id="daily-sales-tbody">${salesData.map(sale => {
+                const paymentMethodText = (sale.paymentMethod === 'cash' || !sale.paymentMethod) ? 'Efectivo' : sale.paymentMethod === 'transfer' ? 'Transferencia' : 'Crédito';
+                return `<tr class="bg-white border-b hover:bg-gray-50"><td class="px-4 py-3 font-medium text-gray-900">${sale.id.slice(-6)}</td><td class="px-4 py-3">${sale.customerName || 'N/A'}</td><td class="px-4 py-3">${paymentMethodText}</td><td class="px-4 py-3 text-right font-semibold">${formatCurrency(sale.total)}</td><td class="px-4 py-3 text-center"><button class="reprint-sale-btn p-1 text-blue-500 hover:text-blue-700" data-id="${sale.id}"><i class="fas fa-print"></i></button><button class="edit-sale-btn p-1 text-yellow-500 hover:text-yellow-700 ml-2" data-id="${sale.id}"><i class="fas fa-edit"></i></button><button class="delete-sale-btn p-1 text-red-500 hover:text-red-700 ml-2" data-id="${sale.id}"><i class="fas fa-trash"></i></button></td></tr>`
+            }).join('')}</tbody></table></div>`;
+        };
+        const renderReconciliationView = () => {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const todaySales = state.sales.filter(sale => new Date(sale.timestamp) >= startOfToday);
+            const todayWithdrawals = state.cashWithdrawals.filter(w => new Date(w.timestamp) >= startOfToday);
+            if (todaySales.length === 0 && todayWithdrawals.length === 0) {
+                reconciliationCardContainer.innerHTML = '<p class="text-gray-500 text-center mt-8">No se han realizado ventas o retiros hoy.</p>';
+                dailySalesListContainer.innerHTML = '';
+                return;
+            }
+
+            const cashSalesCount = todaySales.filter(sale => sale.paymentMethod === 'cash' || !sale.paymentMethod).length;
+            const transferSalesCount = todaySales.filter(sale => sale.paymentMethod === 'transfer').length;
+            const creditSalesCount = todaySales.filter(sale => sale.paymentMethod === 'credit').length;
+
+            const totalRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
+            const totalTransactions = todaySales.length;
+            const totalWithdrawn = todayWithdrawals.reduce((sum, w) => sum + w.amount, 0);
+            const productCounts = todaySales.flatMap(sale => sale.items).reduce((acc, item) => { acc[item.name] = (acc[item.name] || 0) + item.quantity; return acc; }, {});
+            const productSummaryHTML = Object.entries(productCounts).sort((a,b) => b[1] - a[1]).map(([name, count]) => `<li class="flex justify-between py-1"><span class="text-gray-600">${name}</span><span class="font-medium">${count}</span></li>`).join('');
+            const withdrawalSummaryHTML = todayWithdrawals.length > 0 ? todayWithdrawals.map(w => `<li class="flex justify-between items-center py-2"><div><p class="font-medium">${w.reason}</p><p class="text-sm text-gray-500">${new Date(w.timestamp).toLocaleTimeString('es-DO')}</p></div><span class="font-bold text-red-600">-${formatCurrency(w.amount)}</span></li>`).join('') : `<li class="text-gray-500 text-center py-2">No se han realizado retiros hoy.</li>`;
+            
+            reconciliationCardContainer.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-green-100 p-4 rounded-lg text-center">
+                        <p class="text-green-800 font-medium">Ventas Efectivo</p>
+                        <p class="text-3xl font-bold text-green-900">${cashSalesCount}</p>
+                    </div>
+                    <div class="bg-blue-100 p-4 rounded-lg text-center">
+                        <p class="text-blue-800 font-medium">Ventas Transferencia</p>
+                        <p class="text-3xl font-bold text-blue-900">${transferSalesCount}</p>
+                    </div>
+                    <div class="bg-orange-100 p-4 rounded-lg text-center">
+                        <p class="text-orange-800 font-medium">Ventas Crédito</p>
+                        <p class="text-3xl font-bold text-orange-900">${creditSalesCount}</p>
+                    </div>
+                </div>
+                <div class="border rounded-lg p-6 bg-gray-50">
+                    <p class="text-gray-600 font-medium">Fecha: <span class="font-bold">${new Date().toLocaleDateString('es-DO')}</span></p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+                        <div class="bg-blue-100 p-4 rounded-lg text-center">
+                            <p class="text-blue-800 font-medium">Ingresos Totales</p>
+                            <p class="text-4xl font-bold text-blue-900">${formatCurrency(totalRevenue)}</p>
+                        </div>
+                        <div class="bg-green-100 p-4 rounded-lg text-center">
+                            <p class="text-green-800 font-medium">Ventas Totales</p>
+                            <p class="text-4xl font-bold text-green-900">${totalTransactions}</p>
+                        </div>
+                        <div class="bg-red-100 p-4 rounded-lg text-center">
+                            <p class="text-red-800 font-medium">Efectivo Retirado</p>
+                            <p class="text-4xl font-bold text-red-900">${formatCurrency(totalWithdrawn)}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div><h3 class="text-lg font-semibold mb-2">Resumen de Productos</h3><ul class="divide-y divide-gray-200 max-h-64 overflow-y-auto border rounded-md p-4">${productSummaryHTML}</ul></div>
+                        <div><h3 class="text-lg font-semibold mb-2">Resumen de Retiros</h3><ul class="divide-y divide-gray-200 max-h-64 overflow-y-auto border rounded-md p-4">${withdrawalSummaryHTML}</ul></div>
+                    </div>
+                </div>`;
+            renderSalesList(todaySales, dailySalesListContainer, 'Ventas de Hoy');
+        };
+        cashWithdrawalForm.addEventListener('submit', async (e) => { e.preventDefault(); const amount = parseFloat(withdrawalAmountInput.value); const reason = withdrawalReasonInput.value.trim(); if (isNaN(amount) || amount <= 0 || !reason) return alert('Por favor, ingrese un monto y una razón válidos.'); const newWithdrawal = { id: `wd-${Date.now()}`, timestamp: new Date().toISOString(), amount, reason }; state.cashWithdrawals.push(newWithdrawal); await saveDataToFile(); cashWithdrawalForm.reset(); renderReconciliationView(); });
+        exportReconciliationBtn.addEventListener('click', () => { const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0); const todaySales = state.sales.filter(sale => new Date(sale.timestamp) >= startOfToday); const todayWithdrawals = state.cashWithdrawals.filter(w => new Date(w.timestamp) >= startOfToday); if (todaySales.length === 0 && todayWithdrawals.length === 0) return alert('No hay datos para exportar.'); const totalRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0); const totalWithdrawn = todayWithdrawals.reduce((sum, w) => sum + w.amount, 0); let csvContent = "data:text/csv;charset=utf-8,Resumen del Cuadre de Caja\r\n"; csvContent += `Fecha,${new Date().toLocaleDateString('es-DO')}\r\n`; csvContent += `Ingresos Totales,${totalRevenue.toFixed(2)}\r\nVentas Totales,${todaySales.length}\r\nEfectivo Retirado,${totalWithdrawn.toFixed(2)}\r\n\r\nDetalle de Ventas\r\nID Venta,Hora,Cliente,Monto\r\n`; todaySales.forEach(sale => { csvContent += [sale.id, new Date(sale.timestamp).toLocaleTimeString('es-DO'), `"${sale.customerName || ''}"`, sale.total.toFixed(2)].join(',') + "\r\n"; }); csvContent += "\r\nDetalle de Retiros\r\nHora,Monto,Razón\r\n"; todayWithdrawals.forEach(w => { csvContent += [new Date(w.timestamp).toLocaleTimeString('es-DO'), w.amount.toFixed(2), `"${w.reason}"`].join(',') + "\r\n"; }); const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", `cuadre_caja_${new Date().toISOString().split('T')[0]}.csv`); link.click(); });
+        
+        printSummaryBtn.addEventListener('click', () => {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const todaySales = state.sales.filter(sale => new Date(sale.timestamp) >= startOfToday);
+            const todayWithdrawals = state.cashWithdrawals.filter(w => new Date(w.timestamp) >= startOfToday);
+            if (todaySales.length === 0 && todayWithdrawals.length === 0) {
+                alert('No hay resumen para imprimir.');
+                return;
+            }
+            const cashSalesCount = todaySales.filter(sale => sale.paymentMethod === 'cash' || !sale.paymentMethod).length;
+            const transferSalesCount = todaySales.filter(sale => sale.paymentMethod === 'transfer').length;
+            const creditSalesCount = todaySales.filter(sale => sale.paymentMethod === 'credit').length;
+            const totalRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
+            const totalTransactions = todaySales.length;
+            const totalWithdrawn = todayWithdrawals.reduce((sum, w) => sum + w.amount, 0);
+            const productCounts = todaySales.flatMap(sale => sale.items).reduce((acc, item) => { acc[item.name] = (acc[item.name] || 0) + item.quantity; return acc; }, {});
+            const productSummaryHTML = Object.entries(productCounts).sort((a,b) => b[1] - a[1]).map(([name, count]) => `<div style="display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 5px; margin-bottom: 4px; font-size: 14px;"><span style="white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${name}</span><span style="border-bottom: 1px dotted black; margin-bottom: 4px;"></span><span style="font-weight: bold;">${count}</span></div>`).join('');
+            const withdrawalSummaryHTML = todayWithdrawals.length > 0 ? todayWithdrawals.map(w => `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 14px;"><span>${w.reason}</span><span style="font-weight: bold;">-${formatCurrency(w.amount)}</span></div>`).join('') : `<p style="color: #666; text-align: center; padding: 10px 0;">No se han realizado retiros hoy.</p>`;
+            
+            let printHTML = `<div style="max-width: 800px; margin: auto; font-family: 'Inter', sans-serif;">
+                <img src="https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png" alt="Logo" style="width: 100px; margin: 0 auto 20px; display: block;">
+                <h2 style="text-align: center; font-size: 24px; margin-bottom: 10px;">Cuadre de Caja del Día</h2>
+                <p style="text-align: center; font-size: 18px; color: #333; margin-bottom: 20px;">Fecha: ${new Date().toLocaleDateString('es-DO')}</p>
+                
+                <div style="margin-bottom: 20px;">
+                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: center;">
+                        <div style="background-color: #f0fdf4; padding: 10px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 14px; color: #166534;">Ventas Efectivo</p>
+                            <p style="margin: 0; font-size: 22px; font-weight: bold; color: #15803d;">${cashSalesCount}</p>
+                        </div>
+                        <div style="background-color: #eef2ff; padding: 10px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 14px; color: #4338ca;">Ventas Transferencia</p>
+                            <p style="margin: 0; font-size: 22px; font-weight: bold; color: #3730a3;">${transferSalesCount}</p>
+                        </div>
+                        <div style="background-color: #fff7ed; padding: 10px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 14px; color: #9a3412;">Ventas Crédito</p>
+                            <p style="margin: 0; font-size: 22px; font-weight: bold; color: #c2410c;">${creditSalesCount}</p>
+                        </div>
+                        <div style="background-color: #f0fdf4; padding: 10px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 14px; color: #166534;">Ventas Totales</p>
+                            <p style="margin: 0; font-size: 22px; font-weight: bold; color: #15803d;">${totalTransactions}</p>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: center;">
+                        <div style="background-color: #eef2ff; padding: 15px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 16px; color: #4338ca;">Ingresos Totales</p>
+                            <p style="margin: 0; font-size: 24px; font-weight: bold; color: #3730a3;">${formatCurrency(totalRevenue)}</p>
+                        </div>
+                        <div style="background-color: #fef2f2; padding: 15px; border-radius: 8px;">
+                            <p style="margin: 0 0 5px 0; font-size: 16px; color: #991b1b;">Efectivo Retirado</p>
+                            <p style="margin: 0; font-size: 24px; font-weight: bold; color: #b91c1c;">${formatCurrency(totalWithdrawn)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div><h3 style="font-size: 20px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 5px;">Resumen de Productos</h3>${productSummaryHTML}</div>
+                    <div><h3 style="font-size: 20px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 5px;">Resumen de Retiros</h3>${withdrawalSummaryHTML}</div>
+                </div>
+            </div>`;
+            printArea.innerHTML = printHTML;
+            document.body.classList.add('printing-summary');
+            window.print();
+            document.body.classList.remove('printing-summary');
+            printArea.innerHTML = '';
+        });
+
+
+        // Daily Summary Actions
+        dailySalesListContainer.addEventListener('click', (e) => { const reprintBtn = e.target.closest('.reprint-sale-btn'); const editBtn = e.target.closest('.edit-sale-btn'); const deleteBtn = e.target.closest('.delete-sale-btn'); if (reprintBtn) { const sale = state.sales.find(s => s.id === reprintBtn.dataset.id); if(sale) { generateReceipt(sale); document.body.classList.add('printing-receipt'); window.print(); document.body.classList.remove('printing-receipt'); } } if (editBtn) showPinModal(() => editSale(editBtn.dataset.id)); if (deleteBtn) showPinModal(() => deleteSale(deleteBtn.dataset.id)); });
+        const editSale = async (saleId) => { if (!confirm('Esto eliminará la venta actual y cargará sus artículos en la orden para ser procesada de nuevo. ¿Continuar?')) return; const sale = state.sales.find(s => s.id === saleId); if(sale) { state.currentOrder = JSON.parse(JSON.stringify(sale.items)); state.sales = state.sales.filter(s => s.id !== saleId); await saveDataToFile(); render(); switchView('pos'); } };
+        const deleteSale = async (saleId) => { if (!confirm('¿Está seguro de eliminar esta venta permanentemente?')) return; state.sales = state.sales.filter(s => s.id !== saleId); await saveDataToFile(); renderReconciliationView(); };
+        
+        // Settings
+        changePinForm.addEventListener('submit', async (e) => { e.preventDefault(); const currentPin = document.getElementById('current-pin').value; const newPin = document.getElementById('new-pin').value; const confirmNewPin = document.getElementById('confirm-new-pin').value; if (currentPin !== state.settings.adminPin) { changePinMessage.textContent = 'El PIN actual es incorrecto.'; changePinMessage.className = 'text-red-500 h-5 text-center'; return; } if (newPin.length !== 4) { changePinMessage.textContent = 'El nuevo PIN debe tener 4 dígitos.'; changePinMessage.className = 'text-red-500 h-5 text-center'; return; } if (newPin !== confirmNewPin) { changePinMessage.textContent = 'Los nuevos PIN no coinciden.'; changePinMessage.className = 'text-red-500 h-5 text-center'; return; } state.settings.adminPin = newPin; await saveDataToFile(); changePinMessage.textContent = 'PIN actualizado con éxito.'; changePinMessage.className = 'text-green-500 h-5 text-center'; changePinForm.reset(); });
+
+        // --- APP INITIALIZATION ---
+        async function getHandleWithPermission(fileHandle) { const options = { mode: 'readwrite' }; if ((await fileHandle.queryPermission(options)) === 'granted') return fileHandle; if ((await fileHandle.requestPermission(options)) === 'granted') return fileHandle; return null; }
+        
+        async function initializeApp() {
+            if (!window.showOpenFilePicker) {
+                loadingOverlay.innerHTML = `<div class="text-center text-red-600"><i class="fas fa-exclamation-triangle text-4xl"></i><p class="mt-4 text-lg font-semibold">Navegador no compatible. Use Chrome o Edge.</p></div>`;
+                return;
+            }
+
+            const setupScreenHTML = `
+                <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-lg m-4 text-center border">
+                    <img src="https://javierguerrero.work/wp-content/uploads/2025/09/Logo.png" alt="Nelly Buffet Logo" class="h-16 mx-auto mb-4">
+                    <h2 class="text-2xl font-bold mb-4">Bienvenido al Sistema POS</h2>
+                    <p id="setup-message" class="text-gray-600 mb-6">Para comenzar, cree un nuevo archivo de datos para su negocio o abra uno existente si ya ha usado la aplicación antes.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                         <button id="open-file-btn" class="bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center">
+                            <i class="fas fa-folder-open mr-2"></i>Abrir Archivo de Datos
+                        </button>
+                        <button id="create-file-btn" class="bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center">
+                            <i class="fas fa-plus-circle mr-2"></i>Crear Nuevo Archivo
+                        </button>
+                    </div>
+                </div>`;
+
+            const handleFileSetup = async (handle) => {
+                if (!handle) return;
+                try {
+                    loadingOverlay.innerHTML = `<div class="text-center"><i class="fas fa-spinner fa-spin text-4xl text-[var(--primary-color)]"></i><p class="mt-4 text-lg font-semibold">Cargando datos...</p></div>`;
+                    fileHandle = handle;
+                    await idbSet('fileHandle', fileHandle);
+                    await loadDataFromFile();
+                    render();
+                    loadingOverlay.classList.add('hidden');
+                } catch (error) {
+                    console.error("Error setting up file:", error);
+                    alert("Ocurrió un error al procesar el archivo.");
+                    loadingOverlay.innerHTML = setupScreenHTML;
+                    addSetupButtonListeners();
+                }
+            };
+
+            const addSetupButtonListeners = () => {
+                const createBtn = document.getElementById('create-file-btn');
+                const openBtn = document.getElementById('open-file-btn');
+                const setupMsg = document.getElementById('setup-message');
+
+                if (createBtn) {
+                    createBtn.addEventListener('click', async () => {
+                        try {
+                            const handle = await window.showSaveFilePicker({
+                                suggestedName: 'datos_nelly_buffet.json',
+                                types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }],
+                            });
+                            await handleFileSetup(handle);
+                        } catch (error) {
+                            console.log("File creation cancelled.", error);
+                            if(setupMsg) setupMsg.textContent = 'La creación del archivo fue cancelada. Por favor, intente de nuevo.';
+                        }
+                    });
+                }
+                
+                if (openBtn) {
+                    openBtn.addEventListener('click', async () => {
+                        try {
+                            const [handle] = await window.showOpenFilePicker({
+                                types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }],
+                                multiple: false
+                            });
+                            await handleFileSetup(handle);
+                        } catch (error) {
+                            console.log("File open cancelled.", error);
+                            if(setupMsg) setupMsg.textContent = 'La selección de archivo fue cancelada. Por favor, intente de nuevo.';
+                        }
+                    });
+                }
+            };
+
+            try {
+                const storedHandle = await idbGet('fileHandle');
+                if (storedHandle) {
+                    fileHandle = await getHandleWithPermission(storedHandle);
+                    if (fileHandle) {
+                        await loadDataFromFile();
+                        render();
+                        loadingOverlay.classList.add('hidden');
+                        return; // Successful startup
+                    }
+                }
+
+                // If no valid stored handle, show setup screen
+                loadingOverlay.innerHTML = setupScreenHTML;
+                addSetupButtonListeners();
+
+            } catch (error) {
+                console.error("Initialization error:", error);
+                loadingOverlay.innerHTML = setupScreenHTML;
+                addSetupButtonListeners();
+                const setupMsg = document.getElementById('setup-message');
+                if(setupMsg) setupMsg.innerHTML = '<span class="text-red-500">Ocurrió un error. Por favor, intente seleccionar un archivo.</span>';
+                await idbSet('fileHandle', null); // Clear potentially broken handle
+            }
+        }
+
+
+        initializeApp();
+        reportDateInput.value = new Date().toISOString().split('T')[0];
+    });
+    </script>
+</body>
+</html>
