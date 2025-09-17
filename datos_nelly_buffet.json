@@ -1,0 +1,308 @@
+{
+  "products": [
+    {
+      "id": "prod-1",
+      "name": "Arroz Blanco",
+      "price": 75,
+      "imageUrl": null,
+      "category": "Arroces"
+    },
+    {
+      "id": "prod-2",
+      "name": "Moro",
+      "price": 100,
+      "imageUrl": null,
+      "category": "Arroces"
+    },
+    {
+      "id": "prod-3",
+      "name": "Locrio",
+      "price": 125,
+      "imageUrl": null,
+      "category": "Arroces"
+    },
+    {
+      "id": "prod-4",
+      "name": "Res Guisada",
+      "price": 250,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-5",
+      "name": "Pollo Guisado",
+      "price": 200,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-6",
+      "name": "Pollo Frito",
+      "price": 225,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-7",
+      "name": "Chuleta BBQ",
+      "price": 275,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-8",
+      "name": "Bacalao",
+      "price": 300,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-9",
+      "name": "Pechuga G. Blue",
+      "price": 350,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-10",
+      "name": "Pechuga Plancha",
+      "price": 300,
+      "imageUrl": null,
+      "category": "Carnes"
+    },
+    {
+      "id": "prod-11",
+      "name": "Arepita",
+      "price": 50,
+      "imageUrl": null,
+      "category": "Acompañantes"
+    },
+    {
+      "id": "prod-12",
+      "name": "Frito Maduro",
+      "price": 50,
+      "imageUrl": null,
+      "category": "Acompañantes"
+    },
+    {
+      "id": "prod-13",
+      "name": "Tostones",
+      "price": 60,
+      "imageUrl": null,
+      "category": "Acompañantes"
+    },
+    {
+      "id": "prod-14",
+      "name": "Refresco 1/2 Litro",
+      "price": 75,
+      "imageUrl": null,
+      "category": "Bebidas"
+    },
+    {
+      "id": "prod-15",
+      "name": "Refresco 16oz",
+      "price": 50,
+      "imageUrl": null,
+      "category": "Bebidas"
+    },
+    {
+      "id": "prod-16",
+      "name": "Botella de Agua",
+      "price": 40,
+      "imageUrl": null,
+      "category": "Bebidas"
+    },
+    {
+      "id": "prod-17",
+      "name": "Jugo Natural",
+      "price": 100,
+      "imageUrl": null,
+      "category": "Bebidas"
+    }
+  ],
+  "sales": [
+    {
+      "id": "sale-1757989761055",
+      "timestamp": "2025-09-16T02:29:21.055Z",
+      "items": [
+        {
+          "id": "prod-7",
+          "name": "Chuleta BBQ",
+          "price": 275,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-10",
+          "name": "Pechuga Plancha",
+          "price": 300,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        }
+      ],
+      "total": 575,
+      "cashReceived": 600,
+      "changeGiven": 25,
+      "customerName": null,
+      "paymentMethod": "cash"
+    },
+    {
+      "id": "sale-1757990172795",
+      "timestamp": "2025-09-16T02:36:12.795Z",
+      "items": [
+        {
+          "id": "prod-6",
+          "name": "Pollo Frito",
+          "price": 225,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-10",
+          "name": "Pechuga Plancha",
+          "price": 300,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-13",
+          "name": "Tostones",
+          "price": 60,
+          "imageUrl": null,
+          "category": "Acompañantes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-17",
+          "name": "Jugo Natural",
+          "price": 100,
+          "imageUrl": null,
+          "category": "Bebidas",
+          "quantity": 1
+        }
+      ],
+      "total": 685,
+      "cashReceived": 700,
+      "changeGiven": 15,
+      "customerName": null,
+      "paymentMethod": "cash"
+    },
+    {
+      "id": "sale-1757990195266",
+      "timestamp": "2025-09-16T02:36:35.266Z",
+      "items": [
+        {
+          "id": "prod-13",
+          "name": "Tostones",
+          "price": 60,
+          "imageUrl": null,
+          "category": "Acompañantes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-10",
+          "name": "Pechuga Plancha",
+          "price": 300,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-2",
+          "name": "Moro",
+          "price": 100,
+          "imageUrl": null,
+          "category": "Arroces",
+          "quantity": 1
+        }
+      ],
+      "total": 460,
+      "cashReceived": 500,
+      "changeGiven": 40,
+      "customerName": null,
+      "paymentMethod": "transfer"
+    },
+    {
+      "id": "sale-1757991010191",
+      "timestamp": "2025-09-16T02:50:10.191Z",
+      "items": [
+        {
+          "id": "prod-7",
+          "name": "Chuleta BBQ",
+          "price": 275,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-10",
+          "name": "Pechuga Plancha",
+          "price": 300,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        }
+      ],
+      "total": 575,
+      "cashReceived": 600,
+      "changeGiven": 25,
+      "customerName": null,
+      "paymentMethod": "cash"
+    },
+    {
+      "id": "sale-1757991057434",
+      "timestamp": "2025-09-16T02:50:57.434Z",
+      "items": [
+        {
+          "id": "prod-7",
+          "name": "Chuleta BBQ",
+          "price": 275,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        },
+        {
+          "id": "prod-10",
+          "name": "Pechuga Plancha",
+          "price": 300,
+          "imageUrl": null,
+          "category": "Carnes",
+          "quantity": 1
+        }
+      ],
+      "total": 575,
+      "cashReceived": 600,
+      "changeGiven": 25,
+      "customerName": null,
+      "paymentMethod": "credit"
+    }
+  ],
+  "cashWithdrawals": [
+    {
+      "id": "wd-1757991037457",
+      "timestamp": "2025-09-16T02:50:37.457Z",
+      "amount": 100,
+      "reason": "hielo"
+    }
+  ],
+  "users": [
+    {
+      "id": "user-1",
+      "name": "Admin",
+      "role": "admin"
+    },
+    {
+      "id": "user-2",
+      "name": "Cajera",
+      "role": "cajero"
+    }
+  ],
+  "settings": {
+    "adminPin": "1234"
+  },
+  "currentUser": "user-1"
+}
